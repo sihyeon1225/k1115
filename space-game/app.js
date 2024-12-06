@@ -17,9 +17,22 @@ let lastLaserTime = 0; // 마지막 레이저 발사 시각
 const LASER_COOLDOWN = 300; // 레이저 발사 쿨타임 (0.3초 = 300 밀리초)
 let laserRed; // 레이저 이미지를 저장할 변수
 let laserGreenShot; // 레이저 피격 이펙트를 저장할 변수
+let score = 0; // 점수 초기화
+let lives = 3; // 초기 목숨
+let lifeImg; // 목숨을 나타내는 보조 우주선 이미지
+
+
+
+
 
 function gameLoop() {
     drawGame();
+    // 스페이스바를 눌렀을 때 레이저를 발사하도록 함
+    if (isShooting) {
+        shootLaser(); // 레이저 발사
+    }
+    checkVictory(); // 승리 조건 확인
+    checkGameOver(); // 패배 조건 확인
     requestAnimationFrame(gameLoop); // 다음 프레임 호출
 }
 
@@ -31,7 +44,8 @@ window.onload = async () => {
     heroImg = await loadTexture('assets/player.png');
     enemyImg = await loadTexture('assets/enemyShip.png');
     laserGreenShot = await loadTexture('assets/laserGreenShot.png'); 
-
+    lifeImg = await loadTexture("assets/life.png");
+    
     playerX = canvas.width / 2 - 45;
     playerY = canvas.height - (canvas.height / 6);
 
@@ -158,9 +172,12 @@ function updateLasers() {
                 ctx.drawImage(laserGreenShot, enemies[i].x, enemies[i].y, laserGreenShot.width, laserGreenShot.height);
 
                 enemies[i].health -= 3; // 메인 비행기 레이저는 3칸 체력 감소
+                console.log(`Enemy health: ${enemies[i].health}`);
 
                 if (enemies[i].health <= 0) {
+                    
                     enemies.splice(i, 1); // 체력이 0 이하인 적 제거
+                    updateScore(100); // 적 제거 시 100점 추가
                     i--; // 배열 인덱스 보정
                 }
                 
@@ -184,6 +201,7 @@ function updateAuxiliaryLasers() {
 
                 if (enemies[i].health <= 0) {
                     enemies.splice(i, 1); // 체력이 0 이하인 적 제거
+                    updateScore(100); // 적 제거 시 100점 추가
                     i--; // 배열 인덱스 보정
                 }
                 return false; // 해당 레이저 제거
@@ -203,6 +221,28 @@ function drawEnemies(ctx) {
     // 체력바 그리기
     drawHealthBars(ctx);
 }
+function updateScore(points) {
+    score += points; // 점수 추가
+    console.log(`Score updated: ${score}`); // 디버깅 메시지
+}
+
+
+function drawScore() {
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "white";
+    ctx.textAlign = "left";
+    ctx.fillText(`Score: ${score}`, 20, canvas.height - 20); // 왼쪽 하단에 점수 표시
+}
+function drawLives() {
+    const spacing = 50; // 목숨 간 간격
+    const startX = 20; // 목숨 표시 시작 X 좌표
+    const startY = 20; // 목숨 표시 Y 좌표
+
+    for (let i = 0; i < lives; i++) {
+        ctx.drawImage(lifeImg, startX + i * spacing, startY, lifeImg.width * 0.5, lifeImg.height * 0.5); // lifeImg로 수정
+    }
+}
+
 
 
 // 충돌 감지 함수
@@ -227,19 +267,45 @@ function checkCollision() {
 
     for (const enemy of enemies) {
         if (isColliding(player, enemy)) {
-            alert("Game Over!"); // 충돌 시 알림
-            resetGame(); // 게임 초기화
+            lives--; // 목숨 감소
+            if (lives <= 0) {
+                alert("Game Over!");
+                resetGame();
+            } else {
+                resetPlayerPosition(); // 플레이어 위치만 리셋
+            }
             break;
         }
     }
+    
 }
 
 // 게임 초기화 함수
 function resetGame() {
+    lives = 3; // 초기 목숨
+    score = 0; // 초기 점수
     playerX = canvas.width / 2 - 45;
     playerY = canvas.height - (canvas.height / 6);
-    createEnemies2(ctx, canvas, enemyImg);
-    drawGame();
+    enemies = []; // 적 초기화
+    createEnemies2(ctx, canvas, enemyImg); // 적 재생성
+
+    // 이동 및 발사 상태 초기화
+    isMovingLeft = false;
+    isMovingRight = false;
+    isMovingUp = false;
+    isMovingDown = false;
+    isShooting = false;
+
+    // 기타 필요한 상태 초기화
+    lasers = []; // 레이저 초기화
+    auxiliaryLasers = []; // 보조 비행기 레이저 초기화
+
+    drawGame(); // 화면 초기화
+}
+
+function resetPlayerPosition() {
+    playerX = canvas.width / 2 - 45;
+    playerY = canvas.height - (canvas.height / 6);
 }
 
 // 키보드 입력에 따른 플레이어 이동 처리
@@ -290,9 +356,8 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown' && playerY < canvas.height - heroImg.height) isMovingDown = true;
 
     // 레이저 발사 처리
-    if (e.key === ' ' && !isShooting) {
-        shootLaser(); 
-        isShooting = true;
+    if (e.key === ' ') {
+        isShooting = true; // 스페이스바 눌렀을 때 공격 시작
     }
 
     // Z 키로 빔 발사
@@ -319,7 +384,7 @@ window.addEventListener('keyup', (e) => {
     
     // 레이저 발사 중지
     if (e.key === ' ') {
-        isShooting = false; // 레이저 발사 완료
+        isShooting = false; // 스페이스바 뗐을 때 공격 멈춤
     }
 });
 
@@ -422,6 +487,7 @@ function updateBeam() {
             ) {
                 // 충돌한 적 제거
                 enemies.splice(i, 1); // 적 배열에서 해당 적을 제거
+                updateScore(100); // 적 제거 시 100점 추가
                 i--; // 배열 인덱스 보정
             }
         }
@@ -437,6 +503,24 @@ function updateBeam() {
     }
 }
 
+function checkVictory() {
+    if (enemies.length === 0) {
+        alert("Congratulations! You Win!");
+        resetGame(); // 게임 재시작
+    }
+}
+function checkGameOver() {
+    if (lives <= 0) {
+        const restart = confirm("Game Over! Do you want to restart?");
+        if (restart) {
+            resetGame(); // 게임 재시작
+        } else {
+            cancelAnimationFrame(gameLoop); // 게임 루프 중단
+        }
+    }
+}
+
+
 function drawGame() {
     ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height); // 배경 그리기
     drawPlayer(); // 플레이어 그리기
@@ -450,4 +534,6 @@ function drawGame() {
     moveEnemies(); // 적 이동 처리
     drawEnemies(ctx); // 적과 체력바 그리기
     checkCollision(); // 플레이어와 적 충돌 확인
+    drawScore(); // 점수 표시
+    drawLives(); // 목숨 표시
 }
